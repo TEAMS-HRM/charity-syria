@@ -133,9 +133,15 @@ module "ecs" {
     DB_NAME = module.rds.db_name
     DB_USER = module.rds.master_username
 
-    # Diagnostic endpoint, public through the ALB. On for staging, off for
-    # production.
-    DB_CHECK_ENABLED = tostring(var.enable_db_check)
+    # RDS enforces rds.force_ssl, so the driver must negotiate TLS.
+    DB_SSL = "true"
+
+    # Everything left of this in a Host header is the tenant. Passing it rather
+    # than hardcoding a default keeps tenant resolution correct in every
+    # environment.
+    ROOT_DOMAIN = var.domain_name
+    NODE_ENV    = "production"
+    LOG_LEVEL   = var.log_level
   }
 
   # The trailing :password:: pulls one field out of the JSON secret RDS

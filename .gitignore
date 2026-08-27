@@ -40,6 +40,12 @@ aws.json
 
 # Node ------------------------------------------------------------------------
 node_modules/
+
+# Compiled output. The image builds it; committing it invites the repo and the
+# running container to disagree.
+dist/
+build/
+*.tsbuildinfo
 npm-debug.log*
 yarn-error.log*
 

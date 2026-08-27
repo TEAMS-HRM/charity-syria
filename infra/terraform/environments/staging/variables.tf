@@ -151,10 +151,10 @@ variable "db_skip_final_snapshot" {
   default     = true
 }
 
-variable "enable_db_check" {
-  description = "Whether the container serves /db-check. The endpoint is public through the ALB and reports the database hostname, name and user, so keep it off outside staging."
-  type        = bool
-  default     = false
+variable "log_level" {
+  description = "pino log level for the API container: trace, debug, info, warn, error."
+  type        = string
+  default     = "info"
 }
 
 variable "app_secret_initial_values" {

@@ -74,7 +74,7 @@ jobs:
           REPOSITORY: ${{ inputs.ecr_repository }}
           TAG: ${{ github.sha }}
         run: |
-          docker build --platform linux/amd64 -t "$REGISTRY/$REPOSITORY:$TAG" app/hello-world
+          docker build --platform linux/amd64 -t "$REGISTRY/$REPOSITORY:$TAG" app/api
           docker push "$REGISTRY/$REPOSITORY:$TAG"
           echo "uri=$REGISTRY/$REPOSITORY:$TAG" >> "$GITHUB_OUTPUT"
 

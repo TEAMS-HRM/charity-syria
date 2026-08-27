@@ -40,8 +40,7 @@ db_backup_retention_period = 7
 db_deletion_protection     = false
 db_skip_final_snapshot     = true
 
-# Public through the ALB - staging only, used to prove Milestone 3.
-enable_db_check = true
+log_level = "info"
 
 # Phase 6 - application secrets.
 # Placeholders only. Terraform creates these keys once and then stops tracking
