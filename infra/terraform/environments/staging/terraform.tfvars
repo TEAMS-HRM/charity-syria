@@ -10,11 +10,9 @@ private_subnet_cidrs = ["10.10.10.0/24", "10.10.11.0/24"]
 container_port    = 8080
 health_check_path = "/health"
 
-# Phase 5 adds /db-check to the image, but there is no container build tool on
-# this machine yet, so staging stays on the Phase 4 image. The DB_* env vars and
-# the DB_PASSWORD secret ride on it harmlessly - they are simply unread until an
-# image with /db-check is pushed. See PHASE5-README.md step 1.
-image_tag          = "hello-world-v2"
+# Bootstrap from the latest successfully deployed API image. Normal releases
+# remain owned by GitHub Actions, which tags each image with its commit SHA.
+image_tag          = "681c83da5fc3314cdce3678e2e6c695686fd008e"
 task_cpu           = 256
 task_memory        = 512
 desired_count      = 1
