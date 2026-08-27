@@ -1,0 +1,61 @@
+aws_region   = "ap-south-1"
+project_name = "charityapp"
+environment  = "staging"
+
+vpc_cidr             = "10.10.0.0/16"
+availability_zones   = ["ap-south-1a", "ap-south-1b"]
+public_subnet_cidrs  = ["10.10.0.0/24", "10.10.1.0/24"]
+private_subnet_cidrs = ["10.10.10.0/24", "10.10.11.0/24"]
+
+container_port    = 8080
+health_check_path = "/health"
+
+# Phase 5 adds /db-check to the image, but there is no container build tool on
+# this machine yet, so staging stays on the Phase 4 image. The DB_* env vars and
+# the DB_PASSWORD secret ride on it harmlessly - they are simply unread until an
+# image with /db-check is pushed. See PHASE5-README.md step 1.
+image_tag          = "hello-world-v2"
+task_cpu           = 256
+task_memory        = 512
+desired_count      = 1
+log_retention_days = 14
+
+# Phase 4 - domain & TLS.
+# Set domain_name to "" to keep staging on plain HTTP (no ACM, no Route53).
+root_domain = "charity-syria.com"
+domain_name = "staging.charity-syria.com"
+
+# Phase 5 - database.
+# Staging is sized and configured to be cheap and disposable. Production flips
+# multi_az, deletion_protection and skip_final_snapshot the other way.
+db_name                    = "charityapp"
+db_master_username         = "charityapp_admin"
+db_engine_version          = "16"
+db_parameter_group_family  = "postgres16"
+db_instance_class          = "db.t4g.micro"
+db_allocated_storage       = 20
+db_max_allocated_storage   = 100
+db_multi_az                = false
+db_backup_retention_period = 7
+db_deletion_protection     = false
+db_skip_final_snapshot     = true
+
+# Public through the ALB - staging only, used to prove Milestone 3.
+enable_db_check = true
+
+# Phase 6 - application secrets.
+# Placeholders only. Terraform creates these keys once and then stops tracking
+# the values, so replacing them with real ones does not cause drift.
+app_secret_initial_values = {
+  SESSION_SECRET = "REPLACE_ME"
+}
+
+# 0 so `terraform destroy` really removes the secret. A non-zero window reserves
+# the name and blocks recreating staging until it expires.
+secret_recovery_window_in_days = 0
+
+# Phase 7 - CI/CD.
+# Empty github_repo disables the deploy role, leaving the environment
+# deployable only from a workstation.
+github_org  = "TEAMS-HRM"
+github_repo = "charity-syria"

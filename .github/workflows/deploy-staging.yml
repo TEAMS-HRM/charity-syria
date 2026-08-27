@@ -1,0 +1,35 @@
+# Staging deploys itself on every merge to main. No gate - that is the point of
+# a staging environment.
+name: deploy staging
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - ".github/workflows/deploy*.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  # Two merges in quick succession would otherwise race to update the same
+  # service. Newer wins; the older one is cancelled before it deploys.
+  group: deploy-staging
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: staging
+      aws_region: ap-south-1
+      role_to_assume: arn:aws:iam::667512624734:role/charityapp-staging-github-deploy
+      ecr_repository: charityapp-staging-app
+      ecs_cluster: charityapp-staging-cluster
+      ecs_service: charityapp-staging-service
+      task_family: charityapp-staging-app
+      container_name: app
+      smoke_url: https://staging.charity-syria.com/health

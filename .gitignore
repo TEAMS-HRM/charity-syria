@@ -1,0 +1,52 @@
+# Terraform ------------------------------------------------------------------
+# Provider binaries and module caches: ~2 GB, re-created by `terraform init`.
+**/.terraform/
+.terraform.lock.hcl.bak
+
+# State. The real state lives in S3 (see infra/backend.hcl.example). Any
+# tfstate on disk is a local artifact and contains every resource id, ARN and
+# any value Terraform tracks - never commit it.
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+crash.log
+crash.*.log
+
+# Saved plans. Binary, expire quickly, and carry resolved values.
+*.tfplan
+
+# Variable files can hold environment-specific values. terraform.tfvars IS
+# tracked here on purpose - it holds sizes and domains, no secrets - but the
+# override forms never are.
+*.auto.tfvars
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Backend configuration with real bucket/table names. The .example is tracked.
+backend.hcl
+infra/STATE-BACKEND-VALUES.txt
+
+# Credentials ----------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+credentials
+aws.json
+
+# Node ------------------------------------------------------------------------
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Editors / OS ----------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/

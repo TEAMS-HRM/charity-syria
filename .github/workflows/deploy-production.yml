@@ -1,0 +1,50 @@
+# Production is deliberately manual. The gate is the `production` GitHub
+# Environment inside deploy.yml: with required reviewers configured, the job
+# stops and waits for a human before it can even assume the AWS role.
+#
+# NOT YET RUNNABLE. environments/production has not been applied, so none of
+# the resources below exist. Everything here is a variable change away from
+# working once it has - which is the whole point of the structure.
+name: deploy production
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type "deploy" to confirm
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  # Never cancel a production deploy mid-flight; queue it instead.
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation
+        run: |
+          if [ "${{ inputs.confirm }}" != "deploy" ]; then
+            echo "Confirmation not given - type 'deploy' to proceed."
+            exit 1
+          fi
+
+  deploy:
+    needs: guard
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: production
+      aws_region: ap-south-1
+      role_to_assume: arn:aws:iam::667512624734:role/charityapp-production-github-deploy
+      ecr_repository: charityapp-production-app
+      ecs_cluster: charityapp-production-cluster
+      ecs_service: charityapp-production-service
+      task_family: charityapp-production-app
+      container_name: app
+      smoke_url: https://charity-syria.com/health

@@ -1,0 +1,31 @@
+# ---------------------------------------------------------------------------
+# Example backend config for staging / production environments.
+#
+# After `global/bootstrap` is applied, put a backend.tf like the one below in
+# each environment (environments/staging, environments/production). The `key`
+# differs per environment so their states never collide.
+#
+# Fill bucket / dynamodb_table from the bootstrap outputs.
+# ---------------------------------------------------------------------------
+
+# environments/staging/backend.tf
+# terraform {
+#   backend "s3" {
+#     bucket         = "charityapp-tfstate-CHANGE-ME"   # bootstrap output: state_bucket
+#     key            = "staging/terraform.tfstate"      # <-- unique per environment
+#     region         = "eu-west-2"
+#     dynamodb_table = "charityapp-tf-locks"            # bootstrap output: lock_table
+#     encrypt        = true
+#   }
+# }
+
+# environments/production/backend.tf
+# terraform {
+#   backend "s3" {
+#     bucket         = "charityapp-tfstate-CHANGE-ME"
+#     key            = "production/terraform.tfstate"   # <-- different key
+#     region         = "eu-west-2"
+#     dynamodb_table = "charityapp-tf-locks"
+#     encrypt        = true
+#   }
+# }

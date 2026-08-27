@@ -1,0 +1,124 @@
+# Reusable deploy: build the image, push it to ECR, roll the Fargate service,
+# then prove the result over HTTPS. Both environments call this with different
+# inputs - the same "variable change, not a rebuild" rule the Terraform follows.
+name: deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: GitHub Environment. Also the approval gate for production.
+        required: true
+        type: string
+      aws_region:
+        required: true
+        type: string
+      role_to_assume:
+        description: ARN of the OIDC deploy role for this environment.
+        required: true
+        type: string
+      ecr_repository:
+        required: true
+        type: string
+      ecs_cluster:
+        required: true
+        type: string
+      ecs_service:
+        required: true
+        type: string
+      task_family:
+        required: true
+        type: string
+      container_name:
+        required: true
+        type: string
+      smoke_url:
+        description: Health endpoint to curl once the rollout settles.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  # Required for OIDC. Without it the token is never minted and assume-role
+  # fails with a confusing credentials error.
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Pins the OIDC subject claim to repo:OWNER/REPO:environment:<name>, which
+    # is exactly what the IAM trust policy allows. It is also where required
+    # reviewers hang, so production waits for a human here.
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.role_to_assume }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Log in to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # The commit SHA is the tag. The ECR repo uses immutable tags, so a tag
+      # can never be silently rebuilt, and any running task traces back to an
+      # exact commit.
+      - name: Build and push
+        id: image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          REPOSITORY: ${{ inputs.ecr_repository }}
+          TAG: ${{ github.sha }}
+        run: |
+          docker build --platform linux/amd64 -t "$REGISTRY/$REPOSITORY:$TAG" app/hello-world
+          docker push "$REGISTRY/$REPOSITORY:$TAG"
+          echo "uri=$REGISTRY/$REPOSITORY:$TAG" >> "$GITHUB_OUTPUT"
+
+      # Start from the live definition so the DB_* variables and the secrets
+      # Terraform put there survive. Only the image changes here.
+      - name: Fetch current task definition
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition "${{ inputs.task_family }}" \
+            --region "${{ inputs.aws_region }}" \
+            --query taskDefinition > task-definition.json
+
+      - name: Render new revision
+        id: render
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: ${{ inputs.container_name }}
+          image: ${{ steps.image.outputs.uri }}
+
+      - name: Deploy
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render.outputs.task-definition }}
+          cluster: ${{ inputs.ecs_cluster }}
+          service: ${{ inputs.ecs_service }}
+          # Blocks until ECS reports steady state. Combined with the circuit
+          # breaker on the service, a bad image fails the job instead of
+          # quietly rolling back while the pipeline reports success.
+          wait-for-service-stability: true
+
+      # A green deploy only means the container started. This is the check that
+      # it is actually serving through the ALB.
+      - name: Smoke test
+        run: |
+          for attempt in 1 2 3 4 5; do
+            code=$(curl -s -o /tmp/body -w '%{http_code}' "${{ inputs.smoke_url }}" || true)
+            if [ "$code" = "200" ]; then
+              echo "$code $(cat /tmp/body)"
+              exit 0
+            fi
+            echo "attempt $attempt: HTTP $code"
+            sleep 10
+          done
+          echo "smoke test failed: ${{ inputs.smoke_url }} never returned 200"
+          cat /tmp/body || true
+          exit 1
