@@ -8,6 +8,18 @@ variable "github_repo" {
   type        = string
 }
 
+variable "github_org_id" {
+  description = "Numeric GitHub id of the org/user. Needed for the immutable subject form; find it at https://api.github.com/users/<org>. Empty trusts only the classic name-based form."
+  type        = string
+  default     = ""
+}
+
+variable "github_repo_id" {
+  description = "Numeric GitHub id of the repository. Find it at https://api.github.com/repos/<org>/<repo>. Empty trusts only the classic name-based form."
+  type        = string
+  default     = ""
+}
+
 variable "allowed_refs" {
   description = "Git refs allowed to assume the role, e.g. refs/heads/main. Use this for jobs that are NOT pinned to a GitHub Environment."
   type        = list(string)

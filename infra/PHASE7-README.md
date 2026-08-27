@@ -7,11 +7,12 @@ Fargate service and smoke-tests the result — with no AWS keys stored anywhere.
 Prereqs: Phase 6 applied. A GitHub repository. No Docker needed locally, ever
 again — the runner has it.
 
-> **Status, 2026-08-27.** AWS side is applied and verified: the OIDC provider
-> exists, `charityapp-staging-github-deploy` trusts exactly
-> `repo:TEAMS-HRM/charity-syria:environment:staging`, and its permissions are
-> scoped to this environment's ARNs. The repository side is **not** done — the
-> code is committed nowhere and nothing has run. See "Before the first run".
+> **Status, 2026-08-27.** AWS side applied and verified: the OIDC provider
+> exists, `charityapp-staging-github-deploy` trusts both spellings of the repo
+> subject, and its permissions are scoped to this environment's ARNs. Code is
+> pushed to `TEAMS-HRM/charity-syria` (public, by decision). The first pipeline
+> run fired automatically and **failed at assume-role**; the trust policy has
+> since been fixed. Awaiting a re-run — see "Before the first run".
 
 ---
 
@@ -45,9 +46,34 @@ hour. The trust policy is the entire security boundary:
 "token.actions.githubusercontent.com:sub": "repo:TEAMS-HRM/charity-syria:environment:staging"
 ```
 
-`StringEquals`, not `StringLike` — no wildcards. A fork, a feature branch, or a
+`StringEquals`, not `StringLike` - no wildcards. A fork, a feature branch, or a
 different repo presents a different `sub` and is refused by STS before any AWS
 call happens.
+
+### Two spellings of the same repository
+
+The first pipeline run failed here with `Not authorized to perform
+sts:AssumeRoleWithWebIdentity`. GitHub had presented:
+
+```
+repo:TEAMS-HRM@24827849/charity-syria@1348619135:environment:staging
+```
+
+not the documented `repo:TEAMS-HRM/charity-syria:environment:staging`. The newer
+**immutable subject** form embeds the numeric owner and repository ids, so that
+deleting a repo and recreating one with the same name does not inherit its AWS
+access. It is the better claim - but `StringEquals` against the name-based form
+does not match it.
+
+The role trusts **both** spellings. They name the same repository, GitHub decides
+which to send, and trusting both is the only way to be correct on either side of
+that rollout. The ids come from `https://api.github.com/repos/<org>/<repo>` and
+are set as `github_org_id` / `github_repo_id`.
+
+This is also the argument for CloudTrail over workflow logs when debugging OIDC:
+GitHub Actions logs say only "not authorized", while the CloudTrail
+`AssumeRoleWithWebIdentity` event records the exact claim that was presented.
+
 
 Note the claim says `environment:staging`, not `ref:refs/heads/main`. A job
 pinned to a GitHub Environment presents that form instead. It is the stronger
@@ -95,15 +121,24 @@ Terraform follows. The deploy itself:
 
 ## Before the first run
 
-**1. Push the code.** The repository is empty. `git init` and the `.gitignore`
-are done; the commit and push are not.
+**1. Push the code.** Done — `main` on `TEAMS-HRM/charity-syria`.
 
-**2. Check repository visibility.** `TEAMS-HRM/charity-syria` is currently
-**public**. The `.gitignore` keeps state, plans and `.terraform/` out, and there
-are no passwords in any tracked file — but the tracked files still name the AWS
-account ID, the state bucket, the ALB, and every VPC/subnet/SG ID. For a
-donations platform, private is the sane default. Settings → General → Danger
-Zone → Change visibility.
+**2. Repository visibility.** The repo is **public**, by decision. The
+`.gitignore` keeps state, plans and `.terraform/` out, and no password exists in
+any tracked file — the RDS credential lives only in Secrets Manager, which is
+what makes this survivable. What *is* public is infrastructure metadata: the AWS
+account ID, the state bucket name, the ALB, and every VPC/subnet/SG ID. None of
+it grants access on its own. Two things follow from that choice:
+
+- The Phase 8 Budget alarm matters more, not less — a public account ID is the
+  starting point for opportunistic probing.
+- Never commit a `.tfvars` containing a real secret value. The current one holds
+  only sizes, domains and placeholders, and it must stay that way.
+
+**2b. Re-run the failed pipeline.** The first run failed at assume-role before
+the trust policy was fixed. Actions → *deploy staging* → **Run workflow**. A
+`git push` will not re-trigger it unless the commit touches `app/**` or a
+workflow file.
 
 **3. Create the `production` environment with required reviewers.** Settings →
 Environments → New environment → `production` → Required reviewers. **Without
@@ -144,7 +179,7 @@ curl.exe "https://staging.charity-syria.com/db-check"
 
 | Symptom | Cause |
 |---|---|
-| `Not authorized to perform sts:AssumeRoleWithWebIdentity` | the job's `sub` claim does not match the trust policy. Compare against `terraform output cicd_allowed_subjects` |
+| `Not authorized to perform sts:AssumeRoleWithWebIdentity` | the job's `sub` claim does not match the trust policy. Read the real claim from the CloudTrail event, not the workflow log, and compare against `terraform output cicd_allowed_subjects`. Usually the immutable id form - see above |
 | `Credentials could not be loaded` | the workflow is missing `permissions: id-token: write` |
 | `denied: requested access to the resource is denied` on push | image built for the wrong repo, or the role is staging's while the target is production's |
 | Deploy succeeds, smoke test fails | container started but is not serving — check the log group, then the target group |

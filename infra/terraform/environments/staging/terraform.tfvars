@@ -59,3 +59,9 @@ secret_recovery_window_in_days = 0
 # deployable only from a workstation.
 github_org  = "TEAMS-HRM"
 github_repo = "charity-syria"
+
+# GitHub now sends an immutable subject claim embedding these numeric ids
+# (repo:TEAMS-HRM@24827849/charity-syria@1348619135:environment:staging).
+# Without them the trust policy does not match and STS refuses the deploy.
+github_org_id  = "24827849"
+github_repo_id = "1348619135"

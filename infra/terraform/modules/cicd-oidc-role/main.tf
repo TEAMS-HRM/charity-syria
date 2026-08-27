@@ -7,13 +7,27 @@ locals {
   # pinned to a GitHub Environment gets `...:environment:staging`; one that is
   # not gets `...:ref:refs/heads/main`. The role trusts only the exact strings
   # listed here, so a fork or a feature branch cannot assume it.
-  subject_refs = [
-    for ref in var.allowed_refs : "repo:${var.github_org}/${var.github_repo}:ref:${ref}"
-  ]
-  subject_environments = [
-    for env in var.allowed_environments : "repo:${var.github_org}/${var.github_repo}:environment:${env}"
-  ]
-  allowed_subjects = concat(local.subject_refs, local.subject_environments)
+  #
+  # Two spellings of the repository exist. The classic one is `org/repo`. The
+  # newer immutable form embeds numeric ids - `org@24827849/repo@1348619135` -
+  # so that deleting a repo and recreating one with the same name does NOT
+  # inherit its AWS access. GitHub decides which it sends; trusting both is the
+  # only way to be correct on either side of that rollout, and costs nothing
+  # because both name the same repository.
+  repo_named = "${var.github_org}/${var.github_repo}"
+  repo_by_id = (
+    var.github_org_id != "" && var.github_repo_id != ""
+    ? "${var.github_org}@${var.github_org_id}/${var.github_repo}@${var.github_repo_id}"
+    : ""
+  )
+  repo_forms = compact([local.repo_named, local.repo_by_id])
+
+  allowed_subjects = flatten([
+    for form in local.repo_forms : concat(
+      [for ref in var.allowed_refs : "repo:${form}:ref:${ref}"],
+      [for env in var.allowed_environments : "repo:${form}:environment:${env}"],
+    )
+  ])
 }
 
 # Created once in global/github-oidc. Looked up rather than owned, so both

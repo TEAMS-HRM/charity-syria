@@ -180,3 +180,15 @@ variable "github_repo" {
   type        = string
   default     = ""
 }
+
+variable "github_org_id" {
+  description = "Numeric GitHub id of the org/user, used for the immutable OIDC subject form."
+  type        = string
+  default     = ""
+}
+
+variable "github_repo_id" {
+  description = "Numeric GitHub id of the repository, used for the immutable OIDC subject form."
+  type        = string
+  default     = ""
+}
