@@ -8,12 +8,10 @@ and a running Fargate task that proves it can reach it.
 Prereqs: Phase 4 applied and green (Milestone 2), Docker, AWS CLI + SSO profile
 `charityapp-admin`.
 
-> **Staging status, 2026-08-27.** Everything below is applied: the database is
-> `available`, the secret exists, and the service runs task definition revision 2
-> with the `DB_*` variables and the `DB_PASSWORD` secret. The one piece still
-> open is the **image** - there is no container build tool on this machine, so
-> staging stays on `hello-world-v2`, which has no `/db-check`. That endpoint
-> returns 404 until an image carrying it is pushed. See step 1.
+> **Staging status, 2026-08-27.** Complete. The database is `available`, the
+> secret injects, and the service runs an image built by the Phase 7 pipeline.
+> `/db-check` answers over TLS - **Milestone 3 closed**. The hand-built image
+> workaround in step 1 was never needed: the GitHub Actions runner built it.
 
 ---
 
@@ -260,9 +258,8 @@ combination is exactly what production must not have.
 - [x] `aws rds describe-db-instances` shows status `available`, `PubliclyAccessible: false`
 - [x] `terraform output db_secret_arn` resolves to a secret containing a password
 - [x] the service is running the revision with `DB_*` env vars
-- [ ] `curl.exe https://staging.charity-syria.com/db-check` returns `reachable: true`
-      and `speaksPostgres: true`  <- **Milestone 3** *(open: needs an image
-      carrying /db-check, or the run-task probe in step 4)*
+- [x] `curl.exe https://staging.charity-syria.com/db-check` returns `reachable: true`
+      and `speaksPostgres: true`  <- **Milestone 3**
 
 Next: **Phase 6 — Secrets & config** (per-environment secret entries, Stripe keys
 later, and the app reading them all the same way).

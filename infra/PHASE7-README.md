@@ -7,12 +7,12 @@ Fargate service and smoke-tests the result — with no AWS keys stored anywhere.
 Prereqs: Phase 6 applied. A GitHub repository. No Docker needed locally, ever
 again — the runner has it.
 
-> **Status, 2026-08-27.** AWS side applied and verified: the OIDC provider
-> exists, `charityapp-staging-github-deploy` trusts both spellings of the repo
-> subject, and its permissions are scoped to this environment's ARNs. Code is
-> pushed to `TEAMS-HRM/charity-syria` (public, by decision). The first pipeline
-> run fired automatically and **failed at assume-role**; the trust policy has
-> since been fixed. Awaiting a re-run — see "Before the first run".
+> **Status, 2026-08-27.** Working. Run #2 deployed commit `288cb98` end to end:
+> built the image, pushed it tagged with the SHA, rolled the service to task
+> definition revision 4, and passed the smoke test - **Milestone 4 closed**. The
+> same run shipped `/db-check`, closing **Milestone 3**. Run #1 failed at
+> assume-role before the trust policy was fixed; it stays red in history and
+> needs nothing.
 
 ---
 
@@ -135,10 +135,11 @@ it grants access on its own. Two things follow from that choice:
 - Never commit a `.tfvars` containing a real secret value. The current one holds
   only sizes, domains and placeholders, and it must stay that way.
 
-**2b. Re-run the failed pipeline.** The first run failed at assume-role before
-the trust policy was fixed. Actions → *deploy staging* → **Run workflow**. A
-`git push` will not re-trigger it unless the commit touches `app/**` or a
-workflow file.
+**2b. Triggering a run.** Merging anything under `app/**` or a workflow file
+deploys automatically. Anything else — an infra-only commit, for instance — will
+not, by design: infrastructure changes go through `terraform apply` from a
+workstation, not the pipeline. To deploy on demand: Actions → *deploy staging* →
+**Run workflow**.
 
 **3. Create the `production` environment with required reviewers.** Settings →
 Environments → New environment → `production` → Required reviewers. **Without
@@ -193,11 +194,11 @@ curl.exe "https://staging.charity-syria.com/db-check"
 - [x] OIDC provider exists in the account
 - [x] deploy role trusts exactly one repo + environment, scoped to this environment's ARNs
 - [x] workflows written and YAML-valid
-- [ ] code pushed to `TEAMS-HRM/charity-syria`
-- [ ] repository visibility decided
+- [x] code pushed to `TEAMS-HRM/charity-syria`
+- [x] repository visibility decided (public, deliberately)
+- [x] a run deploys staging and the smoke test passes ← **Milestone 4**
+- [x] `/db-check` answers, closing **Milestone 3**
 - [ ] `production` environment created with required reviewers
-- [ ] a merge to `main` deploys staging and the smoke test passes ← **Milestone 4**
-- [ ] `/db-check` answers, closing **Milestone 3**
 
 Next: **Phase 8 — Safety nets** (CloudWatch alarms, AWS Budgets, a tested RDS
 restore). The Budget alarm is the urgent one: RDS started billing on 2026-08-27
