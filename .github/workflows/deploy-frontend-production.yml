@@ -1,0 +1,40 @@
+name: deploy frontend production
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type "deploy" to confirm
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-frontend-production
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check confirmation
+        run: |
+          if [ "${{ inputs.confirm }}" != "deploy" ]; then
+            echo "Confirmation not given - type 'deploy' to proceed."
+            exit 1
+          fi
+
+  deploy:
+    needs: guard
+    uses: ./.github/workflows/deploy-frontend.yml
+    with:
+      environment: production
+      aws_region: ap-south-1
+      role_to_assume: arn:aws:iam::667512624734:role/charityapp-production-github-deploy
+      s3_bucket: charityapp-production-web
+      cloudfront_distribution_id: ""
+      app_path: app/web
+      build_dir: dist

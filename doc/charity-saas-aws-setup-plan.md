@@ -10,22 +10,22 @@
 
 ## Target stack (all AWS)
 
-| Concern | Service |
-|---|---|
-| Compute (backend) | **ECS Fargate** (containers, no servers to patch) |
-| Container registry | **ECR** |
-| Database | **RDS / Aurora PostgreSQL** (schema-per-tenant) |
-| Frontend | Next.js or Angular → **CloudFront + S3** (or Amplify Hosting) |
-| Entry point / routing | **ALB** (Application Load Balancer) |
-| DNS | **Route53** — wildcard `*.charity-syria.com` |
-| TLS | **ACM wildcard cert** `*.charity-syria.com` (auto-renew) |
-| Payments | **Stripe Connect** (external; webhooks hit Fargate) |
-| Media | **S3 + CloudFront**; video via MediaConvert / Mux / Cloudinary |
-| Secrets | **AWS Secrets Manager** |
-| Auth | **Cognito** or custom JWT |
-| CI/CD | **GitHub Actions → ECR → Fargate**, OIDC auth |
-| Observability | **CloudWatch** + Sentry |
-| Billing separation | **AWS Organizations** (separate member account) |
+| Concern               | Service                                                        |
+| --------------------- | -------------------------------------------------------------- |
+| Compute (backend)     | **ECS Fargate** (containers, no servers to patch)              |
+| Container registry    | **ECR**                                                        |
+| Database              | **RDS / Aurora PostgreSQL** (schema-per-tenant)                |
+| Frontend              | Next.js or Angular → **CloudFront + S3** (or Amplify Hosting)  |
+| Entry point / routing | **ALB** (Application Load Balancer)                            |
+| DNS                   | **Route53** — wildcard `*.charity-syria.com`                   |
+| TLS                   | **ACM wildcard cert** `*.charity-syria.com` (auto-renew)       |
+| Payments              | **Stripe Connect** (external; webhooks hit Fargate)            |
+| Media                 | **S3 + CloudFront**; video via MediaConvert / Mux / Cloudinary |
+| Secrets               | **AWS Secrets Manager**                                        |
+| Auth                  | **Cognito** or custom JWT                                      |
+| CI/CD                 | **GitHub Actions → ECR → Fargate**, OIDC auth                  |
+| Observability         | **CloudWatch** + Sentry                                        |
+| Billing separation    | **AWS Organizations** (separate member account)                |
 
 ---
 
@@ -36,8 +36,8 @@
 - Create a **new member account for CharityApp** inside the org.
 - **Consolidated billing**: one payment method at payer level, per-account cost breakdown.
 - Member accounts **cannot** hold their own payment method while in the org.
-  - Want cost *visibility* only → stay in org, use per-account breakdown + Budgets.
-  - Need a genuinely *different card/entity* to pay → keep CharityApp **standalone**
+  - Want cost _visibility_ only → stay in org, use per-account breakdown + Budgets.
+  - Need a genuinely _different card/entity_ to pay → keep CharityApp **standalone**
     (outside the org) with its own payment method.
 - Lock down the management account root: **MFA, no daily use, minimal access**.
 
@@ -46,6 +46,7 @@
 ## Setup order (never-blocked sequence)
 
 ### Phase 0 — Accounts & access (everything depends on this)
+
 1. Enable AWS Organizations on current account → becomes management/payer.
 2. Create CharityApp member account inside the org.
 3. Lock down root on both: MFA, strong password, stop using root day-to-day.
@@ -54,22 +55,26 @@
    before writing infra — it's where state lives.
 
 ### Phase 1 — Networking foundation
+
 6. VPC with public + private subnets across 2 AZs.
 7. Internet Gateway (public) + NAT Gateway (private subnets reach out for image pulls, Stripe).
 8. Security groups: ALB SG (public 443), Fargate SG (from ALB only), RDS SG (from Fargate only).
 
 ### Phase 2 — Registry & a deployable artifact
+
 9. Create **ECR** repository.
 10. Build & push a **hello-world container** (tiny HTTP responder) — need something
     deployable to prove the pipeline before real code exists.
 
 ### Phase 3 — Compute + entry point
+
 11. **ALB** in public subnets + target group + health check path (`/health`).
 12. **ECS Fargate** cluster + service + task definition running hello-world, in private
     subnets, registered to the ALB target group.
 13. Hit the ALB DNS name over HTTP → hello-world. ← **Milestone 1: container live.**
 
 ### Phase 4 — Domain & TLS
+
 14. **ACM wildcard cert** `*.charity-syria.com` (DNS-validated).
 15. **Route53** wildcard record `*.charity-syria.com` → ALB (+ apex if needed).
 16. ALB HTTPS listener (443) using ACM cert; redirect 80→443.
@@ -77,22 +82,26 @@
     ← **Milestone 2: TLS + wildcard multi-tenant routing proven.**
 
 ### Phase 5 — Database
+
 18. **RDS / Aurora PostgreSQL** in private subnets, subnet group across 2 AZs.
 19. Store DB credentials in **Secrets Manager**.
 20. Confirm Fargate task connects to Postgres privately (usually needs SG fiddling).
     ← **Milestone 3: DB reachable.**
 
 ### Phase 6 — Secrets & config
+
 21. Secrets Manager entries: DB URL, (later) Stripe keys — per environment.
 22. Wire Fargate task execution role to read those secrets as env vars.
 
 ### Phase 7 — CI/CD (ties it together)
+
 23. GitHub Actions: on merge → build image → push to ECR → update Fargate service.
 24. Two environments: **staging** auto-deploys; **production** behind a **manual approval gate**.
     ← **Milestone 4: pipeline deploys.**
 25. Smoke test after deploy (curl `/health` through the ALB).
 
 ### Phase 8 — Safety nets
+
 26. CloudWatch log groups for Fargate + alarms (5xx rate, unhealthy tasks).
 27. **AWS Budgets** on the account + alert threshold.
 28. Automated RDS backups on + test a restore once.
@@ -147,6 +156,7 @@ infra/
 ```
 
 ### How the pieces relate
+
 - **`global/bootstrap`** runs once, manually, first — creates the S3 bucket + DynamoDB
   table all other state uses. Chicken-and-egg: this one uses local state, everything
   after uses remote.
@@ -163,13 +173,16 @@ infra/
   `"db.t4g.medium"`. Same module, different size.
 
 ### Dependency order within an environment's `main.tf`
+
 ```
 networking → security → ecr → acm → alb → ecs → rds → dns → secrets → observability
 ```
+
 Terraform resolves most ordering via references; structure module calls in this order
 for readability.
 
 ### Wiring notes
+
 - Pass outputs between modules explicitly (`networking` outputs subnet IDs →
   `ecs`/`rds` consume them). Keep data flow visible; don't let modules look each other up.
 - Keep **GitHub Actions** config outside Terraform (`.github/workflows/`), but let it read
@@ -180,6 +193,7 @@ for readability.
 ---
 
 ## Suggested first three moves
+
 1. Apply `global/bootstrap` → remote state exists.
 2. Build `modules/networking` + `modules/security`, apply to staging → foundation up.
 3. Get `ecr` + `ecs` + `alb` deploying hello-world to staging → **Milestone 1 (step 13)**.
@@ -190,15 +204,15 @@ From there the rest slots in in the order above.
 
 ## Time estimate breakdown
 
-| Task | Est. |
-|---|---|
-| AWS Organizations + new account, IAM/roles, MFA lockdown | 0.5–1 day |
-| Networking: VPC, subnets, ALB, security groups | 0.5–1 day |
-| ECS Fargate + ECR, deploy hello-world | 1–1.5 days |
-| RDS/Aurora Postgres provisioning + connectivity | 0.5–1 day |
-| Route53 wildcard + ACM wildcard cert wired to ALB | 0.5 day |
-| CI/CD (GitHub Actions → ECR → Fargate), staging + prod, gated approval | 1–2 days |
-| Secrets Manager, env config, CloudWatch, Budgets | 0.5–1 day |
+| Task                                                                   | Est.       |
+| ---------------------------------------------------------------------- | ---------- |
+| AWS Organizations + new account, IAM/roles, MFA lockdown               | 0.5–1 day  |
+| Networking: VPC, subnets, ALB, security groups                         | 0.5–1 day  |
+| ECS Fargate + ECR, deploy hello-world                                  | 1–1.5 days |
+| RDS/Aurora Postgres provisioning + connectivity                        | 0.5–1 day  |
+| Route53 wildcard + ACM wildcard cert wired to ALB                      | 0.5 day    |
+| CI/CD (GitHub Actions → ECR → Fargate), staging + prod, gated approval | 1–2 days   |
+| Secrets Manager, env config, CloudWatch, Budgets                       | 0.5–1 day  |
 
 **Time sinks to expect:** first Fargate + ALB + networking wiring (target groups, health
 checks, SGs); RDS private connectivity from Fargate; IAM least-privilege roles; first green
@@ -207,6 +221,10 @@ production deploy through the approval gate.
 ---
 
 ## Not in this scope (next phase — the app itself)
+
+The implementation order for this work is in
+[`charity-saas-application-plan.md`](charity-saas-application-plan.md).
+
 - Tenant provisioning flow (create schema, seed admin)
 - Stripe Connect onboarding + webhooks + reconciliation
 - Domain models: donors, donations, campaigns, media

@@ -1,0 +1,72 @@
+name: deploy frontend
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      aws_region:
+        required: true
+        type: string
+      role_to_assume:
+        required: true
+        type: string
+      s3_bucket:
+        required: true
+        type: string
+      cloudfront_distribution_id:
+        required: false
+        type: string
+        default: ""
+      app_path:
+        required: false
+        type: string
+        default: app/web
+      build_dir:
+        required: false
+        type: string
+        default: dist
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: ${{ inputs.app_path }}/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ${{ inputs.app_path }}
+
+      - name: Build frontend
+        run: npm run build
+        working-directory: ${{ inputs.app_path }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.role_to_assume }}
+          aws-region: ${{ inputs.aws_region }}
+
+      - name: Upload static build to S3
+        run: |
+          aws s3 sync "${{ inputs.app_path }}/${{ inputs.build_dir }}" "s3://${{ inputs.s3_bucket }}" --delete
+
+      - name: Invalidate CloudFront cache
+        if: ${{ inputs.cloudfront_distribution_id != '' }}
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ inputs.cloudfront_distribution_id }}" \
+            --paths "/*"

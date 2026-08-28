@@ -1,0 +1,29 @@
+name: deploy frontend staging
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/web/**"
+      - ".github/workflows/deploy-frontend*.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-frontend-staging
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy-frontend.yml
+    with:
+      environment: staging
+      aws_region: ap-south-1
+      role_to_assume: arn:aws:iam::667512624734:role/charityapp-staging-github-deploy
+      s3_bucket: charityapp-staging-web
+      cloudfront_distribution_id: ""
+      app_path: app/web
+      build_dir: dist

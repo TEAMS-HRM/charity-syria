@@ -1,11 +1,6 @@
-import {
-  Injectable,
-  Logger,
-  OnApplicationShutdown,
-  OnModuleInit,
-} from '@nestjs/common';
-import { Pool, PoolClient, QueryResult, QueryResultRow } from 'pg';
-import { loadConfig } from '../config';
+import { Injectable, Logger, OnApplicationShutdown, OnModuleInit } from "@nestjs/common";
+import { Pool, PoolClient, QueryResult, QueryResultRow } from "pg";
+import { loadConfig } from "../config";
 
 export interface DatabaseHealth {
   reachable: boolean;
@@ -44,8 +39,8 @@ export class DatabaseService implements OnModuleInit, OnApplicationShutdown {
 
     // A pool error is emitted for idle clients dropped by the server. Without a
     // listener, Node treats it as an unhandled error and kills the process.
-    this.pool.on('error', (error) => {
-      this.logger.error({ err: error }, 'idle database client error');
+    this.pool.on("error", (error) => {
+      this.logger.error({ err: error }, "idle database client error");
     });
   }
 
@@ -57,9 +52,7 @@ export class DatabaseService implements OnModuleInit, OnApplicationShutdown {
     if (!health.reachable) {
       throw new Error(`Database unreachable at startup: ${health.error}`);
     }
-    this.logger.log(
-      `Database connected in ${health.latencyMs}ms (${health.serverVersion})`,
-    );
+    this.logger.log(`Database connected in ${health.latencyMs}ms (${health.serverVersion})`);
   }
 
   async onApplicationShutdown(): Promise<void> {
@@ -73,16 +66,22 @@ export class DatabaseService implements OnModuleInit, OnApplicationShutdown {
     return this.pool.query<T>(text, params);
   }
 
+  async withClient<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
+    const client = await this.pool.connect();
+    try {
+      return await work(client);
+    } finally {
+      client.release();
+    }
+  }
+
   /**
    * Runs work against one connection pinned to a tenant's schema. Schema-per-
    * tenant isolation lives here: the search_path is set on the connection, the
    * callback runs, and the path is reset before the connection goes back to the
    * pool - a leak would hand the next request the wrong tenant's data.
    */
-  async withTenant<T>(
-    schema: string,
-    work: (client: PoolClient) => Promise<T>,
-  ): Promise<T> {
+  async withTenant<T>(schema: string, work: (client: PoolClient) => Promise<T>): Promise<T> {
     if (!/^[a-z_][a-z0-9_]*$/.test(schema)) {
       throw new Error(`Refusing unsafe schema name: ${schema}`);
     }
@@ -92,7 +91,7 @@ export class DatabaseService implements OnModuleInit, OnApplicationShutdown {
       await client.query(`SET search_path TO "${schema}", public`);
       return await work(client);
     } finally {
-      await client.query('SET search_path TO public').catch(() => undefined);
+      await client.query("SET search_path TO public").catch(() => undefined);
       client.release();
     }
   }
@@ -101,15 +100,13 @@ export class DatabaseService implements OnModuleInit, OnApplicationShutdown {
     const startedAt = Date.now();
 
     try {
-      const result = await this.pool.query<{ version: string }>(
-        'select version()',
-      );
+      const result = await this.pool.query<{ version: string }>("select version()");
 
       return {
         reachable: true,
         latencyMs: Date.now() - startedAt,
         // "PostgreSQL 16.13 on x86_64..." trimmed to just the version.
-        serverVersion: result.rows[0]?.version.split(' ').slice(0, 2).join(' '),
+        serverVersion: result.rows[0]?.version.split(" ").slice(0, 2).join(" "),
         pool: {
           total: this.pool.totalCount,
           idle: this.pool.idleCount,

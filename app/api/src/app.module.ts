@@ -1,11 +1,16 @@
-import { Module, RequestMethod } from '@nestjs/common';
-import { LoggerModule } from 'nestjs-pino';
-import { randomUUID } from 'node:crypto';
-import { AppController } from './app.controller';
-import { loadConfig } from './config';
-import { DatabaseModule } from './database/database.module';
-import { HealthModule } from './health/health.module';
-import { resolveTenant } from './tenant/tenant';
+import { Module, RequestMethod } from "@nestjs/common";
+import { LoggerModule } from "nestjs-pino";
+import { randomUUID } from "node:crypto";
+import { AppController } from "./app.controller";
+import { AuthModule } from "./auth/auth.module";
+import { loadConfig } from "./config";
+import { DatabaseModule } from "./database/database.module";
+import { HealthModule } from "./health/health.module";
+import { OrganizationsModule } from "./organizations/organizations.module";
+import { PlatformModule } from "./platform/platform.module";
+import { resolveTenant } from "./tenant/tenant";
+import { TenantModule } from "./tenant/tenant.module";
+import { WebModule } from "./web/web.module";
 
 const config = loadConfig();
 
@@ -24,24 +29,16 @@ const config = loadConfig();
 
         // Correlates every line of one request. ALB sets X-Amzn-Trace-Id, so
         // prefer that - it ties our logs to the load balancer's.
-        genReqId: (req) =>
-          (req.headers['x-amzn-trace-id'] as string) ?? randomUUID(),
+        genReqId: (req) => (req.headers["x-amzn-trace-id"] as string) ?? randomUUID(),
 
         customProps: (req) => ({
-          tenant: resolveTenant(
-            (req.headers.host as string) ?? '',
-            config.rootDomain,
-          ).slug,
+          tenant: resolveTenant((req.headers.host as string) ?? "", config.rootDomain).slug,
         }),
 
         // Never log cookies or auth headers - these logs are retained for 14
         // days and readable by anyone with CloudWatch access.
         redact: {
-          paths: [
-            'req.headers.authorization',
-            'req.headers.cookie',
-            'req.headers["set-cookie"]',
-          ],
+          paths: ["req.headers.authorization", "req.headers.cookie", 'req.headers["set-cookie"]'],
           remove: true,
         },
 
@@ -65,10 +62,15 @@ const config = loadConfig();
       // runs later against the real request, so the logs look correct while the
       // filter does nothing. Verified: `ignore` saw "/" for a request to
       // "/health".
-      exclude: [{ path: 'health', method: RequestMethod.GET }],
+      exclude: [{ path: "health", method: RequestMethod.GET }],
     }),
+    AuthModule,
     DatabaseModule,
     HealthModule,
+    OrganizationsModule,
+    PlatformModule,
+    TenantModule,
+    WebModule,
   ],
   controllers: [AppController],
 })

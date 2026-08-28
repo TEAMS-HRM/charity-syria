@@ -11,11 +11,21 @@ step and no local Docker requirement.
 
 ## Endpoints
 
-| Route | Purpose |
-|---|---|
-| `GET /` | Echoes the resolved tenant. Placeholder for the real application |
-| `GET /health` | ALB target-group probe. **Shallow on purpose** |
-| `GET /health/db` | Deep check: real query against Postgres, pool stats |
+| Route                                        | Purpose                                                                                     |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `GET /`                                      | Echoes resolved tenant and organization context; unknown/inactive org subdomains return 404 |
+| `GET /landing`                               | Temporary global landing + org-signup web page for milestone testing                        |
+| `GET /admin`                                 | Temporary platform control page; guarded by auth + platform admin                           |
+| `GET /organizations/slug/:slug/availability` | Slug availability check                                                                     |
+| `POST /organizations`                        | Reserve organization, bootstrap founder owner membership, enqueue provisioning job          |
+| `GET /organizations/:id/provisioning`        | Provisioning status check                                                                   |
+| `POST /organizations/provisioning/run-once`  | Run one provisioning job (optionally for one organization id)                               |
+| `POST /platform/bootstrap-admin`             | Dev/local bootstrap for first platform admin user (disabled when Cognito is enabled)        |
+| `GET /platform/organizations`                | List organizations with status and provisioning summary                                     |
+| `POST /platform/organizations/:id/approve`   | Approve signup by running provisioning for the selected organization                        |
+| `GET /tenant/context`                        | Authenticated tenant context (requires active org membership)                               |
+| `GET /health`                                | ALB target-group probe. **Shallow on purpose**                                              |
+| `GET /health/db`                             | Deep check: real query against Postgres, pool stats                                         |
 
 ### Why `/health` does not touch the database
 
@@ -33,14 +43,28 @@ a diagnosis to read, not a trigger for the load balancer to act on.
 All from the environment; the task definition supplies them (see
 [`infra/terraform/environments/staging/main.tf`](../../infra/terraform/environments/staging/main.tf)).
 
-| Variable | Notes |
-|---|---|
-| `PORT` | default 8080 |
-| `DB_HOST` `DB_PORT` `DB_NAME` `DB_USER` | plain env, not secret |
-| `DB_PASSWORD` | injected by ECS from Secrets Manager, never in the task definition |
-| `DB_SSL` | `true` in AWS — RDS enforces `rds.force_ssl` |
-| `ROOT_DOMAIN` | everything to its left in a `Host` header is the tenant |
-| `LOG_LEVEL` | pino level, default `info` |
+| Variable                                                        | Notes                                                              |
+| --------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `PORT`                                                          | default 8080                                                       |
+| `DB_HOST` `DB_PORT` `DB_NAME` `DB_USER`                         | plain env, not secret                                              |
+| `DB_PASSWORD`                                                   | injected by ECS from Secrets Manager, never in the task definition |
+| `DB_SSL`                                                        | `true` in AWS — RDS enforces `rds.force_ssl`                       |
+| `ROOT_DOMAIN`                                                   | everything to its left in a `Host` header is the tenant            |
+| `PROVISIONING_WORKER_ENABLED`                                   | set `true` to process provisioning queue automatically             |
+| `PROVISIONING_WORKER_INTERVAL_MS`                               | worker polling interval in milliseconds (default `4000`)           |
+| `COGNITO_REGION` `COGNITO_USER_POOL_ID` `COGNITO_APP_CLIENT_ID` | enables Cognito JWT verification for auth guards                   |
+| `LOG_LEVEL`                                                     | pino level, default `info`                                         |
+
+When Cognito variables are not configured, guarded endpoints accept local dev
+identity using headers:
+
+- `x-dev-user-sub: local-user-1`
+- `x-dev-email: founder@charity.local` (optional)
+
+For browser loading of guarded HTML pages, the same values can be passed as
+query params:
+
+- `/admin?devSub=local-user-1&devEmail=founder%40charity.local`
 
 Missing required variables throw at startup rather than on the first request
 that needs them, so a misconfigured task fails the deploy instead of serving
@@ -88,15 +112,17 @@ Use nestjs-pino's module-level `exclude`, **not** pinoHttp's
 
 ```ts
 LoggerModule.forRoot({
-  pinoHttp: { /* ... */ },
-  exclude: [{ path: 'health', method: RequestMethod.GET }],
-})
+  pinoHttp: {
+    /* ... */
+  },
+  exclude: [{ path: "health", method: RequestMethod.GET }],
+});
 ```
 
 nestjs-pino runs as Nest middleware, and under Fastify the request object handed
 to `autoLogging.ignore` has its url rewritten relative to the mount point — it is
 always `"/"`, so a path comparison there silently never matches. The serializer
-runs later against the real request, so the logs *look* correct while the filter
+runs later against the real request, so the logs _look_ correct while the filter
 does nothing at all. Confirmed by instrumenting `ignore()`: it received `"/"` for
 a request to `/health`.
 
@@ -129,12 +155,15 @@ $env:ROOT_DOMAIN="localhost"
 
 ## Not done yet
 
-- **Migrations.** `node-pg-migrate` is installed and `migrations/` exists, but
-  nothing runs it and there are no migrations. Needs deciding: a pipeline step,
-  or an init container. Schema-per-tenant makes it more than `migrate up` — every
-  tenant schema needs the change applied.
-- **No tables.** `withTenant` works; there is nothing to select yet.
-- **Tenant provisioning.** Creating a schema and seeding an admin is unwritten.
+- **Provisioning runner architecture.** A run-once endpoint and optional in-process
+  worker exist, but production should use a dedicated worker task/queue with
+  retries and dead-letter handling.
+- **Tenant membership bootstrap.** Provisioning activates an organization and
+  creates baseline tenant tables, but founder user/membership seeding is not wired.
+- **Auth product flow.** JWT verification and guards exist, but full Cognito signup,
+  verification, and sign-in UX/API flow is incomplete.
+- **Control page authorization.** `/admin` and `/platform/organizations` are
+  currently for testing and not yet protected by platform-admin guard.
 - **TLS verification.** `rejectUnauthorized: false` — traffic is encrypted, but
   the server certificate is not verified. Bake the RDS CA bundle into the image
   before production.
