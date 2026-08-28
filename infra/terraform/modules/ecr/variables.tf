@@ -13,3 +13,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "force_delete" {
+  description = "Whether destroying the repository also deletes the images inside it. AWS refuses to delete a non-empty repository otherwise, so disposable environments set this true."
+  type        = bool
+  default     = false
+}

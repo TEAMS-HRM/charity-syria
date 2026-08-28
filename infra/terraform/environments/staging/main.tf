@@ -44,7 +44,12 @@ module "ecr" {
   source = "../../modules/ecr"
 
   repository_name = "${local.name_prefix}-app"
-  tags            = local.common_tags
+
+  # Staging is disposable, so a destroy must not stall on leftover images.
+  # Production leaves this at the module default of false.
+  force_delete = true
+
+  tags = local.common_tags
 }
 
 # Must be issued before the ALB can terminate TLS, so it comes first.
